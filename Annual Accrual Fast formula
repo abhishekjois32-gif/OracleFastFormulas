@@ -1,0 +1,371 @@
+/******************************************************************************
+FORMULA NAME: ABS_ANNUAL_ACCRUAL_FF 
+FORMULA TYPE: Global Absence Accrual Matrix
+DESCRIPTION: 
+Name			Date		Version		Comments
+Abhishek		01/01/2026  1.0			Created
+-------------------------------------------------------------------------------
+*******************************************************************************/
+
+DEFAULT FOR PER_ASG_FTE_VALUE is 0
+DEFAULT FOR PER_ASG_EMPLOYMENT_CATEGORY_MEANING is 'XX'
+DEFAULT FOR PER_ASG_ASSIGNMENT_STATUS_TYPE_ID is 0
+DEFAULT FOR PER_ASG_ATTRIBUTE4 is 'XX'
+DEFAULT FOR PER_ASG_ATTRIBUTE9 is 'XX'
+DEFAULT FOR PER_ASG_ATTRIBUTE10 is 'XX'
+DEFAULT FOR ANC_ABS_PLN_NAME is 'XX'
+DEFAULT FOR PER_ASG_CONTRACT_DURATION is 0
+DEFAULT FOR PER_ASG_CONTRACT_EFFECTIVE_START_DATE is '1951/01/01 00:00:00' (date)
+DEFAULT FOR PER_ASG_CONTRACT_END_DATE is '1951/01/01 00:00:00' (date)
+DEFAULT FOR PER_ASG_CONTRACT_EFFECTIVE_END_DATE is '1951/01/01 00:00:00' (date)
+DEFAULT FOR PER_ASG_CONTRACT_DURATION_UNITS is 'XX'
+DEFAULT_DATA_VALUE FOR PER_SENDT_F_V3_PERSON_ID IS 0
+DEFAULT_DATA_VALUE FOR PER_SENDT_F_V3_SENIORITY_DATE_CODE IS 'null'
+DEFAULT_DATA_VALUE FOR PER_SENDT_F_V3_SENIORITY_DATE IS '1951/01/01 00:00:00' (date)
+DEFAULT_DATA_VALUE FOR PER_SENDT_F_V3_EFFECTIVE_START_DATE	IS '1951/01/01 00:00:00' (date)
+DEFAULT_DATA_VALUE FOR ANC_PER_ABS_ENTRS_ABSENCE_ENTRY_ID_ARR is 0
+DEFAULT FOR ANC_ABS_ENTRS_ABSENCE_STATUS_CD is 'Null'
+DEFAULT FOR ANC_ABS_ENTRS_DURATION is 0
+DEFAULT FOR ANC_ABS_ENTRS_ABSENCE_TYPE_ID is 0
+
+
+inputs are
+ iv_accrualperiodstartdate	(date)
+,iv_accrualperiodenddate	(date)
+,IV_PLANENROLLMENTENDDATE	(date)
+,IV_PLANENROLLMENTSTARTDATE	(date)
+
+
+default for iv_accrualperiodstartdate	is '1951/01/01'	(date)
+default for iv_accrualperiodenddate		is '1951/01/01'	(date)
+default for IV_PLANENROLLMENTENDDATE	is '1901/01/01'	(date)
+default for IV_PLANENROLLMENTSTARTDATE	is '1901/01/01'	(date)
+
+
+	l_assignment_id (number)			=   get_context(HR_ASSIGNMENT_ID, 0)
+	l_person_id (number)				=   get_context(PERSON_ID, 0)
+	l_accrual_plan_id (number)			=   get_context(ACCRUAL_PLAN_ID, 0)
+	l_legal_employer_id (number)		=   get_context(LEGAL_EMPLOYER_ID, 0)
+	l_effective_date (date)				=   get_context(EFFECTIVE_DATE, '1901/01/01' (date))
+	l_hr_relationship_id				=   get_context(HR_RELATIONSHIP_ID,0)
+	l_ldg_id							=   get_context(LEGISLATIVE_DATA_GROUP_ID,0)
+	L_SEN_DATE							=   '1951/01/01' (date) 
+	L_MAX_SEN_START_DATE				=   '1951/01/01' (date)
+	l_start_date (date)					=   '1901/01/01' (date)
+	l_plan_start_date (date)			=   '4712/12/31' (date)
+	l_plan_end_date (date)				=   '1901/01/01' (date)
+	l_fte								=   PER_ASG_FTE_VALUE
+	l_asg_cat							=   PER_ASG_EMPLOYMENT_CATEGORY_MEANING
+	l_asg_status						=   PER_ASG_ASSIGNMENT_STATUS_TYPE_ID
+	l_gft_val							=   PER_ASG_ATTRIBUTE4
+	l_asl_payback_flag					=   PER_ASG_ATTRIBUTE9
+	l_asl_payback_rate					=   PER_ASG_ATTRIBUTE10
+	l_hours_per_period					=   80
+	l_accrl_rate_per_hr					=   0
+	l_value								=   'X'
+	l_value_Hrs							=   0
+	l_unpaid_hours						=   0
+	l_unpaid_time_accr_dedn				=   0
+	l_absence_plan_name 				=   ANC_ABS_PLN_NAME
+	l_contract_dur						=   PER_ASG_CONTRACT_DURATION
+	l_contract_eff_st_dt				=   PER_ASG_CONTRACT_EFFECTIVE_START_DATE
+	l_contract_end_date					=   PER_ASG_CONTRACT_END_DATE
+	l_contract_eff_end_dt				=   PER_ASG_CONTRACT_EFFECTIVE_END_DATE
+	l_contract_dur_units				=   PER_ASG_CONTRACT_DURATION_UNITS
+	l_date								=   '1901/01/01' (date)
+	l_acrl_prd_strt_date				=   '1901/01/01' (date)
+	l_acrl_prd_end_date					=   '1901/01/01' (date)
+	accrual (number)					=   0       /* This is seeded and output variable*/
+
+	 log =  ess_log_write('ABS_ANNUAL_FF - Started----------------------------------------') 
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_assignment_id => ' + to_char(l_assignment_id)) 
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_person_id => ' + to_char(l_person_id))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_absence_plan_name => ' + l_absence_plan_name)
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_effective_date => ' + to_char(l_effective_date))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_fte 1 => ' + to_char(l_fte))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_asg_cat => ' + l_asg_cat)
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_asg_status => ' + to_char(l_asg_status))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_gft_val => ' + l_gft_val)
+	 log =  ess_log_write('ABS_ANNUAL_FF - On ASL Payback => ' + l_asl_payback_flag)
+	 log =  ess_log_write('ABS_ANNUAL_FF - ASL Payback Rate => ' + l_asl_payback_rate)
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_contract_dur => ' + to_char(l_contract_dur))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_contract_eff_st_dt => ' + to_char(l_contract_eff_st_dt))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_contract_end_date => ' + to_char(l_contract_end_date))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_contract_eff_end_dt => ' + to_char(l_contract_eff_end_dt))
+	 log =  ess_log_write('ABS_ANNUAL_FF - l_contract_dur_units => ' + l_contract_dur_units)
+
+
+
+/* Get FTE value based on Geographic Full Time DFF */
+	if (l_asg_cat = '01 - Faculty Tenured'
+		or l_asg_cat = '02 - Faculty Non-Tenured Tenure Track'
+		or l_asg_cat = '03 - Faculty Non-Tenured Non Tenure Track'
+		) then
+		(
+			if (l_gft_val = 'Y') then
+			(
+			l_fte = 1
+			)
+		)
+		ELSE
+		(
+			
+			l_fte = l_fte
+			
+		)
+		
+
+ log =  ess_log_write('ABS_ANNUAL_FF - l_fte 2 => ' + to_char(l_fte))
+
+/* Get Start Date */
+CHANGE_CONTEXTS(EFFECTIVE_DATE = l_effective_date, PERSON_ID = l_person_id) 
+(
+	I = 1
+	WHILE PER_SENDT_F_V3_PERSON_ID.EXISTS(I) LOOP  
+	(
+		IF (PER_SENDT_F_V3_PERSON_ID[I] = l_person_id AND PER_SENDT_F_V3_SENIORITY_DATE_CODE[I] = 'XXX_USM_SENIORITY_DATE' AND PER_SENDT_F_V3_EFFECTIVE_START_DATE[I]>L_MAX_SEN_START_DATE) THEN  
+		(
+			L_SEN_DATE            = PER_SENDT_F_V3_SENIORITY_DATE[I]
+			L_MAX_SEN_START_DATE  = PER_SENDT_F_V3_EFFECTIVE_START_DATE[I]
+		)
+		I = I + 1
+	)
+
+	l_start_date = L_SEN_DATE
+)
+ log = ess_log_write('ABS_ANNUAL_FF - l_start_date => ' + to_char(l_start_date)) 
+
+
+/* Calculate absence plan start date */
+l_plan_start_date = IV_PLANENROLLMENTSTARTDATE
+ log = ess_log_write('ABS_ANNUAL_FF - l_plan_start_date => ' + to_char(l_plan_start_date))
+
+
+/* Calculate accrual date */
+l_acrl_prd_strt_date = iv_accrualperiodstartdate
+l_acrl_prd_end_date = iv_accrualperiodenddate
+
+ log =  ess_log_write('ABS_ANNUAL_FF - l_acrl_prd_strt_date => ' + to_char(l_acrl_prd_strt_date))
+ log =  ess_log_write('ABS_ANNUAL_FF - l_acrl_prd_end_date => ' + to_char(l_acrl_prd_end_date))
+
+
+/* Get Length of Service */
+l_years_of_service = round((months_between(l_effective_date, l_start_date)/12), 4)
+ log = ess_log_write('ABS_ANNUAL_FF - l_years_of_service => ' + to_char(l_years_of_service))
+
+
+/* Calculate accrual rate per hour*/
+if (l_asg_cat = '20 - Non Exempt Regular') then
+(
+	if (l_years_of_service > 0 and l_years_of_service <= 1) then
+	(
+		l_accrl_rate_per_hr = ((14 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 1=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service > 1 and l_years_of_service <= 2) then
+	(
+		l_accrl_rate_per_hr = ((15 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 2=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service > 2 and l_years_of_service <= 3) then
+	(
+		l_accrl_rate_per_hr = ((16 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 3=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service > 3 and l_years_of_service <= 4) then
+	(
+		l_accrl_rate_per_hr = ((17 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 4=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service > 4 and l_years_of_service <= 10) then
+	(
+		l_accrl_rate_per_hr = ((18 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 5=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service > 10 and l_years_of_service <= 20) then
+	(
+		l_accrl_rate_per_hr = ((20 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 6=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service > 20) then
+	(
+		l_accrl_rate_per_hr = ((25 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 7=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else
+	(
+		l_accrl_rate_per_hr = 0
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 8=> ' + to_char(l_accrl_rate_per_hr))
+	)
+)
+if (l_asg_cat = '01 - Faculty Tenured'
+	or l_asg_cat = '02 - Faculty Non-Tenured Tenure Track'
+	or l_asg_cat = '03 - Faculty Non-Tenured Non Tenure Track'
+	or l_asg_cat = '19 - Trainee Employee'
+	or l_asg_cat = '33 - Exempt Regular') then
+(
+	if (l_years_of_service > 0 and l_years_of_service < 21) then
+	(
+		l_accrl_rate_per_hr = ((22 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 9=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else if (l_years_of_service >= 21) then
+	(
+		l_accrl_rate_per_hr = ((25 * 8) / 2080) * l_fte
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 10=> ' + to_char(l_accrl_rate_per_hr))
+	)
+	else
+	(
+		l_accrl_rate_per_hr = 0
+		 log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 11=> ' + to_char(l_accrl_rate_per_hr))
+	)
+)
+ log =  ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr 12=> ' + to_char(l_accrl_rate_per_hr))
+
+
+/* Calculate Accrual */
+if(l_plan_start_date <= l_effective_date and l_fte >= 0.5) then
+(
+	if (l_effective_date >= l_acrl_prd_strt_date and l_effective_date <= l_acrl_prd_end_date) then
+	(	
+		accrual = l_accrl_rate_per_hr * l_hours_per_period
+		 log =  ess_log_write('ABS_ANNUAL_FF - accrual 1 => ' + to_char(accrual))
+	)
+	else
+	(
+		accrual = 0
+		 log =  ess_log_write('ABS_ANNUAL_FF - accrual 2 => ' + to_char(accrual))
+	)
+	
+	if (l_asg_cat = '22 - Non Exempt Cont. 2') then
+	(
+		l_contract_dur = DAYS_BETWEEN(l_contract_end_date, l_contract_eff_st_dt)
+		l_contract_dur = (l_contract_dur/365)*12
+	  log =  ess_log_write('ABS_ANNUAL_FF - l_contract_dur => ' + to_char(l_contract_dur))
+		accrual = (l_contract_dur/12) * 80
+	)
+	
+	if (l_asg_cat = '01 - 10/12 Faculty Tenured'
+		or l_asg_cat = '02 - 10/12 Faculty Non-Tenured Tenure Track'
+		or l_asg_cat = '03 - 10/12 Faculty Non-Tenured Non Tenure Track'
+		) then
+	(
+		accrual = 120
+	)
+)
+
+if (l_asg_cat = '01 - 10/12 Faculty Tenured'
+		or l_asg_cat = '02 - 10/12 Faculty Non-Tenured Tenure Track'
+		or l_asg_cat = '03 - 10/12 Faculty Non-Tenured Non Tenure Track'
+		or l_asg_cat = '22 - Non Exempt Cont. 2'
+		) then
+		(accrual = accrual)
+	ELSE
+(
+/* Calculate Accrual based on Advanced Sick Leave Flag */
+CHANGE_CONTEXTS(EFFECTIVE_DATE = l_effective_date, PERSON_ID = l_person_id) 
+(
+	if (PER_ASG_ATTRIBUTE9 was defaulted or l_asl_payback_flag = 'XX') then
+	(
+		accrual = accrual
+		 log =  ess_log_write('ABS_ANNUAL_FF - accrual 3 => ' + to_char(accrual))
+	)
+	else if (l_asl_payback_flag = 'Y') then
+	(
+		if (PER_ASG_ATTRIBUTE10 was defaulted or l_asl_payback_rate = 'XX') then
+		(
+			accrual = accrual
+			 log =  ess_log_write('ABS_ANNUAL_FF - accrual 4 => ' + to_char(accrual))
+		)
+		else if (l_asl_payback_rate = '50%') then
+		(
+			accrual = accrual / 2
+			 log =  ess_log_write('ABS_ANNUAL_FF - accrual 5 => ' + to_char(accrual))
+		)
+		else if (l_asl_payback_rate = '100%') then
+		(
+			accrual = accrual / 2
+			 log =  ess_log_write('ABS_ANNUAL_FF - accrual 6 => ' + to_char(accrual))
+		)
+		else
+		(
+			accrual = accrual
+			 log =  ess_log_write('ABS_ANNUAL_FF - accrual 7 => ' + to_char(accrual))
+		)
+	)
+	else
+	(
+		accrual = accrual
+		 log =  ess_log_write('ABS_ANNUAL_FF - accrual 8 => ' + to_char(accrual))
+	)
+)
+)
+
+
+/* Calculate Accrual based on Unpaid Time Hours */
+l_date = l_acrl_prd_strt_date
+i = 1
+l_value = GET_VALUE_SET('UGET_UNPAID_TIME_HOURS_VS')
+ log =  ess_log_write('ABS_ANNUAL_FF - l_value => ' + l_value)
+
+CHANGE_CONTEXTS (start_date = l_acrl_prd_strt_date, end_date = l_acrl_prd_end_date)
+(
+i = ANC_PER_ABS_ENTRS_ABSENCE_ENTRY_ID_ARR.FIRST(-1)
+while (ANC_PER_ABS_ENTRS_ABSENCE_ENTRY_ID_ARR.exists(i)) LOOP
+(
+  CHANGE_CONTEXTS(ABSENCE_ENTRY_ID = ANC_PER_ABS_ENTRS_ABSENCE_ENTRY_ID_ARR[I])
+  (
+  if( ANC_ABS_ENTRS_ABSENCE_TYPE_ID = to_number(l_value) AND ANC_ABS_ENTRS_ABSENCE_STATUS_CD <> 'ORA_WITHDRAWN')
+   then 
+   (
+    log = ess_log_write('ABS_ANNUAL_FF - ANC_ABS_ENTRS_ABSENCE_TYPE_ID => ' + to_char(ANC_ABS_ENTRS_ABSENCE_TYPE_ID))
+	log = ess_log_write('ABS_ANNUAL_FF - ANC_ABS_ENTRS_DURATION => ' + to_char(ANC_ABS_ENTRS_DURATION))
+    l_value_Hrs = ANC_ABS_ENTRS_DURATION
+   )
+   else 
+   (
+			l_value_Hrs = 0
+		)
+l_unpaid_hours = l_unpaid_hours + l_value_Hrs
+ 
+)
+i =ANC_PER_ABS_ENTRS_ABSENCE_ENTRY_ID_ARR.NEXT(I,-1)
+)
+)
+
+ log = ess_log_write('ABS_ANNUAL_FF - l_unpaid_hours => ' + to_char(l_unpaid_hours))
+  log = ess_log_write('ABS_ANNUAL_FF - l_accrl_rate_per_hr => ' + to_char(l_accrl_rate_per_hr))
+
+l_unpaid_time_accr_dedn = l_accrl_rate_per_hr * l_unpaid_hours
+ log =  ess_log_write('ABS_ANNUAL_FF - l_unpaid_time_accr_dedn => ' + to_char(l_unpaid_time_accr_dedn))
+
+if (l_asg_cat = '22 - Non Exempt Cont. 2'
+	or l_asg_cat = '01 - 10/12 Faculty Tenured'
+		or l_asg_cat = '02 - 10/12 Faculty Non-Tenured Tenure Track'
+		or l_asg_cat = '03 - 10/12 Faculty Non-Tenured Non Tenure Track'
+		) then
+		(l_unpaid_time_accr_dedn = 0)
+
+accrual = accrual - l_unpaid_time_accr_dedn
+ log =  ess_log_write('ABS_ANNUAL_FF - accrual 9 => ' + to_char(accrual))
+
+/*if(accrual < 0) then
+(
+	accrual = 0
+	 log =  ess_log_write('ABS_ANNUAL_FF - accrual 10 => ' + to_char(accrual))
+)*/
+
+/* Update accrual based on Assigment Status */
+if (l_asg_status = 6 or l_asg_status = 4 or l_asg_status = 2 or l_asg_status = 1003) then
+(
+accrual = 0
+ log =  ess_log_write('ABS_ANNUAL_FF - accrual 11 => ' + to_char(accrual))
+)
+else
+(
+accrual = accrual
+ log =  ess_log_write('ABS_ANNUAL_FF - accrual12 => ' + to_char(accrual))
+)
+ log =  ess_log_write('ABS_ANNUAL_FF - accrual 13 => ' + to_char(accrual))
+
+return accrual
