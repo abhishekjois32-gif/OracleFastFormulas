@@ -1,0 +1,73 @@
+/******************************************************************************
+-------------------------------------------------------------------------------
+FORMULA NAME: CMP_ELIGIBILITY_PROFILE_FF
+FORMULA TYPE: Participant and Rate Eligibility
+DESCRIPTION: 
+===============================================================================
+Change History:
+Name			Date			Version		Comments
+Abhishek Jois   01-01-2026   	1.0			Created.
+-------------------------------------------------------------------------------
+*******************************************************************************/
+
+DEFAULT_DATA_VALUE FOR PER_HIST_ASG_ASSIGNMENT_ID IS 1
+DEFAULT_DATA_VALUE FOR PER_HIST_ASG_ACTION_CODE IS 'XX'
+DEFAULT_DATA_VALUE FOR PER_HIST_ASG_REL_ACTUAL_TERM_DATE IS '4712/12/31 00:00:00' (date)
+DEFAULT FOR PER_ASG_EMPLOYMENT_CATEGORY IS 'XX'
+DEFAULT_DATA_VALUE for PER_HIST_ASG_EMPLOYMENT_CATEGORY IS 'XX' 
+DEFAULT_DATA_VALUE for PER_HIST_ASG_EFFECTIVE_START_DATE IS '4712/12/31 00:00:00' (date)
+
+
+l_assignment_id			=   get_context(HR_ASSIGNMENT_ID, -1)
+	l_person_id (number)				=   get_context(PERSON_ID, 0)
+	l_effective_date (date)				=   get_context(EFFECTIVE_DATE, '1901/01/01' (date))
+
+log = set_log(' l_effective_date => ' + to_char(l_effective_date))
+p_eff_date = ADD_MONTHS(l_effective_date,-4)
+
+log = set_log(' p_eff_date => ' + to_char(p_eff_date))
+
+CHANGE_CONTEXTS (HR_ASSIGNMENT_ID = l_assignment_id,EFFECTIVE_DATE = l_effective_date)
+(
+l_asg_cat_code						=	PER_ASG_EMPLOYMENT_CATEGORY
+log = set_log('l_asg_cat_code => ' + (l_asg_cat_code))
+)
+
+ELIGIBLE = 'N'
+i=1
+cnt = 'N'	
+		 CHANGE_CONTEXTS(PERSON_ID = l_person_id)
+		log = ess_log_write('PERSON_ID => '||to_char(l_person_id))
+		( 
+			WHILE PER_HIST_ASG_ACTION_CODE.EXISTS(i)
+			LOOP
+			(
+			log = ess_log_write('PER_EXT_CAL_COVERAGE_CATEGORY 2=> ')
+				IF (PER_HIST_ASG_ACTION_CODE [i]='TRANSFER' and PER_HIST_ASG_ASSIGNMENT_ID[i] = l_assignment_id 
+				and PER_HIST_ASG_EFFECTIVE_START_DATE [i] >= p_eff_date 
+				and  PER_HIST_ASG_EFFECTIVE_START_DATE[i] =< l_effective_date 
+			 and (PER_HIST_ASG_EMPLOYMENT_CATEGORY [i] ='GRAD_ASST' 
+ or PER_HIST_ASG_EMPLOYMENT_CATEGORY[i] ='GRAD_ASST_INST') 	)
+
+				THEN 
+			(
+				cnt = 'Y'
+				
+				log = set_log(' cnt => ' + (cnt))
+	  log = set_log(' Action => ' + (PER_HIST_ASG_ACTION_CODE [i]))
+	  log = set_log(' Category => ' + (PER_HIST_ASG_EMPLOYMENT_CATEGORY [i]))
+  log = set_log(' Trasfer effective date => ' + to_char(PER_HIST_ASG_EFFECTIVE_START_DATE [i]))
+			)
+		i=i+1
+		
+			)
+		)
+
+if cnt = 'N' AND (l_asg_cat_code = 'GRAD_ASST' OR l_asg_cat_code = 'GRAD_ASST_INST')
+then (ELIGIBLE = 'Y')
+else 
+(
+ELIGIBLE = 'N'
+)
+			
+return ELIGIBLE
