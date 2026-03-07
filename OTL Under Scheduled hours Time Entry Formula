@@ -1,0 +1,249 @@
+   /* +======================================================================+
+   |                Copyright (c) 2009 Oracle Corporation                 |
+   |                   Redwood Shores, California, USA                    |
+   |                        All rights reserved.                          |
+   +======================================================================+
+ *
+ * Formula Name: OTL_UNDER_SCHEDULED_HOURS_FF
+ *   
+ *   
+ * Formula Type:  Time Entry Rules  
+ *   
+ * 
+ * Description:      Evaluates whether the reported time entries for the 
+ *                   time category are not less than FTE value. This custom formula  
+ *                   validates the hours based on biweekly total for Full Time and part time for the time sheet
+ *                   	 
+ *                   
+ *                     
+ *
+ *
+ *  Change History
+ *  --------------
+ *
+ *  Who               Ver        Date           Description
+ *-----------------  ------      ------------   -----------------------------------------
+ * Abhishek Jois       1.00        2025-FEB-05    Created.    
+ *
+ *  
+ ***************************************************************************/    
+
+DEFAULT FOR HWM_CTXARY_RECORD_POSITIONS   is  EMPTY_TEXT_NUMBER 
+DEFAULT FOR measure  is  EMPTY_NUMBER_NUMBER 
+DEFAULT FOR StartTime   is  EMPTY_DATE_NUMBER
+DEFAULT FOR StopTime   is  EMPTY_DATE_NUMBER 
+DEFAULT FOR PayrollTimeType   is  EMPTY_TEXT_NUMBER
+DEFAULT FOR OraMeasureAll     is  EMPTY_NUMBER_NUMBER 
+DEFAULT FOR PER_ASG_WORKING_HOURS IS 0
+
+DEFAULT FOR PER_ASG_FTE_VALUE IS 1
+DEFAULT for PER_ASG_EMPLOYMENT_CATEGORY				is 'XX'
+DEFAULT for PER_ASG_POSITION_NAME is 'XX'
+DEFAULT for PER_ASG_JOB_NAME is 'XX'
+DEFAULT for PER_ASG_FREQUENCY is 'XX'
+DEFAULT FOR PER_ASG_NORMAL_HOURS is 0
+DEFAULT FOR PER_ASG_STATUS_USER_STATUS is 'Active - Payroll Eligible'
+DEFAULT FOR PER_ASG_REL_ACTUAL_TERMINATION_DATE IS '4751/12/31 00:00:00' (DATE)
+DEFAULT FOR PER_ASG_REL_DATE_START IS '1951/01/01 00:00:00' (DATE)
+INPUTS ARE   
+  HWM_CTXARY_RECORD_POSITIONS,
+  measure , 
+/* SubresourceId ,*/
+  StartTime,
+  StopTime,
+  OraMeasureAll,
+  PayrollTimeType,
+  TimeRecordType
+  
+
+ffs_id = GET_CONTEXT(HWM_FFS_ID, 0) 
+rule_id = GET_CONTEXT(HWM_RULE_ID, 0) 
+
+ffName = 'OTL_UNDER_SCHEDULED_HOURS_FF  - v1.000'
+rLog  = add_rlog (ffs_id, rule_id, '>>> ' || ffName    )
+
+
+
+/* ----------- constant values   -------- */
+/* ------------------------------------- */
+NullDate =  '01-JAN-1900'(DATE)  
+NullDateTime = '1900/01/01 00:00:00' (date)   
+NullText = '**FF_NULL**'
+
+TimeRecordType_MEASURE = 'MEASURE'
+TimeRecordType_RANGE = 'RANGE'
+
+sumLvlTimeCard = 'TIMECARD'
+sumLvlDay = 'DAY'
+sumLvlDetail  = 'DETAIL'
+
+RecPositoinEoPeriod = 'END_PERIOD' 
+RecPositoinEoDay = 'END_DAY' 
+RecPositoinDetail = 'DETAIL'  
+
+ctx_start_date = '01-JAN-1900'(DATE) 
+ctx_end_date = '01-JAN-1900'(DATE) 
+ctx_subResource = 0
+l_break_hours = 0
+
+/* ----------- Rule Header parameters  -------- */
+/* -------------------------------------------- */
+process_empty_tc  = Get_Hdr_Text(rule_id ,'INCLUDE_EMPTY_TC', 'Y') 
+if (upper(process_empty_tc) = 'YES' or upper(process_empty_tc) = 'Y' ) then ( 
+   process_empty_tc = 'Y' 
+) 
+
+sum_lvl = Get_Hdr_Text(rule_id ,'RUN_SUMMATION_LEVEL', 'TIMECARD')  
+
+
+/* ----------- Rule input parameters  -------- */
+/* ------------------------------------------- */
+pMaxHr  = get_rvalue_number (rule_id ,'DEFINED_LIMIT', 0) 
+pMsgCd  = get_rvalue_text (rule_id ,'MESSAGE_CODE', 'HWM_FF_TER_PERIOD_LS_MIN_WRN')   
+pTimeCatId  =   get_rvalue_number (rule_id ,'WORKED_TIME_CONDITION', 0)  
+
+rLog = add_rlog (ffs_id, rule_id, '(Rule parameters: '  ||  
+							'; ffs_id='  ||  TO_CHAR( ffs_id ) ||     
+							'; pMaxHr='  ||  TO_CHAR( pMaxHr )  ||   
+							'; pMsgcd='  ||  pMsgcd ||    
+							'; pTimeCatId='  ||  TO_CHAR( pTimeCatId ) )
+
+
+
+/* ----------- Temp Workarea variables  -------- */
+/* --------------------------------------------- */  
+out_msg_ary 	=	EMPTY_TEXT_NUMBER	 
+
+/* ----------- Temp Workarea variables  -------- */
+/* --------------------------------------------- */  
+wk_hrs_total_day  = 0
+wk_hrs_total_tc   = 0  
+worker_Biweekly_working_hour = 0
+worker_weekly_working_hour = 0
+working_hours1 = 0
+working_hours2 = 0
+pMinHr  = 0
+QUERY ='XXX'
+lDailyTotalHours = 0
+lWeeklyTotal = 0
+lAsgStatus = 'Active - Payroll Eligible'
+/* ----------- Loop through current Time Card(POJO) Main Logic -------- */
+/* -------------------------------------------------------------------- */  
+max_ary = HWM_CTXARY_RECORD_POSITIONS.count 
+rLog  = add_rlog (ffs_id, rule_id, ' >>> Start bulk process - max_ary=' || TO_CHAR( max_ary )  )
+ctx_personId = GET_CONTEXT(HWM_RESOURCE_ID, 0)
+ctx_subResource = GET_CONTEXT(HWM_SUBRESOURCE_ID, 0)
+ctx_start_date = GET_CONTEXT(HWM_CTX_SEARCH_START_DATE,  NullDate)
+ctx_end_date = GET_CONTEXT(HWM_CTX_SEARCH_END_DATE, NullDate) 
+lPrimaryAsgPersonId = GET_CONTEXT(HWM_SUBRESOURCE_ID,0)
+rLog  = add_rlog (ffs_id, rule_id, ' >>> Person id - ' || TO_CHAR( ctx_personId )  || ' ,Assignment_id - ' || TO_CHAR( ctx_subResource ) || ' ,ctx_start_date - ' || TO_CHAR(ctx_start_date) || ' ,ctx_end_date -'|| TO_CHAR(ctx_end_date) )
+
+
+
+
+nidx = 0
+
+CHANGE_CONTEXTS (HR_ASSIGNMENT_ID = lPrimaryAsgPersonId,EFFECTIVE_DATE = ctx_end_date)
+(
+l_asg_cat_code						=	PER_ASG_EMPLOYMENT_CATEGORY
+lNormalWorkingHours = PER_ASG_NORMAL_HOURS
+lPos_name = PER_ASG_POSITION_NAME
+lJob_name = PER_ASG_JOB_NAME
+l_frequency = PER_ASG_FREQUENCY
+fte = PER_ASG_FTE_VALUE
+lTerminationDate_1 = PER_ASG_REL_ACTUAL_TERMINATION_DATE
+
+
+rLog = add_rlog (ffs_id , rule_id ,  'lPos_name  =' || (lPos_name) || ' ,fte - ' || TO_CHAR( fte ) || ' ,lNormalWorkingHours - ' || TO_CHAR(lNormalWorkingHours) || ' ,lTerminationDate_1 -'|| TO_CHAR(lTerminationDate_1) )
+
+)
+
+pMinHr =  lNormalWorkingHours
+pMsgcd  = get_rvalue_text (rule_id  ,'MESSAGE_CODE', 'UNDER_HOURS') 
+
+
+WHILE (nidx < max_ary ) LOOP
+(	  
+    nidx = nidx + 1	 
+	tcMEASURE = 0  
+    tcAssignmentId = 0
+    tcPayrolltimetype = NullText
+
+	tcRecPos   = HWM_CTXARY_RECORD_POSITIONS[nidx] 
+	
+	
+	
+  iF ( tcRecPos = 'DETAIL' ) THEN
+  (
+    if (MEASURE.exists(nidx) ) then 
+	  ( 
+	    lMeasure  = MEASURE[nidx] 
+	  )  
+	
+	  IF (PAYROLLTIMETYPE.exists(nidx) ) then 
+	  (
+      lPayrollTimeType = PAYROLLTIMETYPE[nidx] 
+      rLog = add_rlog (ffs_id , rule_id , 'lPayrollTimeType : ' || lPayrollTimeType ) 
+    )
+	
+    IF ( lMeasure > 0 ) THEN
+	  (
+	    lDailyTotalHours = lDailyTotalHours + lMeasure
+      lWeeklyTotal = lWeeklyTotal + lMeasure	  
+	  rLog = add_rlog (ffs_id , rule_id ,  'lWeeklyTotal  =' || TO_CHAR(lWeeklyTotal) )
+	  )
+	
+   )
+
+  IF ( tcRecPos = 'END_DAY' ) THEN
+	(
+	  
+	  lDailyTotalHours = 0
+	  
+	  lDayOfTheWeek = get_date_day_of_Week(STARTTIME[nidx]) 
+	  rLog = add_rlog (ffs_id , rule_id ,  'lDayOfTheWeek-1  =' || (lDayOfTheWeek) )
+	  
+	  IF lDayOfTheWeek = 'SUN' then
+	  (
+	    lNormalWorkingHours = 0
+	    CHANGE_CONTEXTS (HR_ASSIGNMENT_ID = lPrimaryAsgPersonId,EFFECTIVE_DATE = StartTime[nidx])
+      (
+	      lNormalWorkingHours = PER_ASG_NORMAL_HOURS
+        lTerminationDate = PER_ASG_REL_ACTUAL_TERMINATION_DATE
+		l_hire_date = PER_ASG_REL_DATE_START
+		Days= days_between (StartTime[nidx],l_hire_date)
+		rLog = add_rlog (ffs_id , rule_id ,  'Days  =' || TO_CHAR(Days) )
+		rLog = add_rlog (ffs_id , rule_id ,  'Days  =' || TO_CHAR(l_hire_date) )
+		rLog = add_rlog (ffs_id , rule_id ,  'STARTTIME[nidx]  =' || TO_CHAR(STARTTIME[nidx]) )
+		rLog = add_rlog (ffs_id , rule_id ,  'lPrimaryAsgPersonId  =' || TO_CHAR(lPrimaryAsgPersonId) )
+		rLog = add_rlog (ffs_id , rule_id ,  'Days  =' || TO_CHAR(Days) ) */
+		rLog = add_rlog (ffs_id , rule_id ,  'lNormalWorkingHours  =' || TO_CHAR(lNormalWorkingHours) )
+		rLog = add_rlog (ffs_id , rule_id ,  'lTerminationDate  =' || TO_CHAR(lTerminationDate) )
+	    )
+	if ( lWeeklyTotal < lNormalWorkingHours  and lTerminationDate > StartTime[nidx] AND  Days > 5 )   
+	   then
+      (
+          tkn1 = 'WEEK_ENDING'
+          val1 =  TO_CHAR(StartTime[nidx],'MM/DD')		
+	        sMsg = get_output_msg1( 'HWM' ,'UNDER_HOURS',tkn1 ,val1) 
+	        rLog = add_rlog (ffs_id , rule_id ,  'sMsg_OUT =' || sMsg  ) 				 
+	        out_msg_ary[nidx] = sMsg 
+      )	  
+		  lWeeklyTotal = 0
+      lAsgStatus = 'Active - Payroll Eligible'
+    )		
+	)
+	
+    
+
+	if (nidx >  100 ) Then (
+		/* endless loop?  Stop process if more than max_loop records found */
+		ex = raise_error (ffs_id, rule_id, 'Formula ' || ffName || ' terminated due to possible end-less loop.' )
+	) )
+
+rLog  = add_rlog (ffs_id, rule_id, ' Error Message Count- ' || TO_CHAR(out_msg_ary.COUNT)) 
+
+rLog  = add_rlog (ffs_id, rule_id, '-- end bulk process <<<<' ) 
+
+
+RETURN  out_msg_ary
