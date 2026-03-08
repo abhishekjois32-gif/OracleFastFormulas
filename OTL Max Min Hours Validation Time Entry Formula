@@ -1,0 +1,286 @@
+/*****************************************************************************
+ * Formula Name : OTL_MAX_MIN_VALIDATION
+ *
+ * Formula Type:  Time Entry rule
+ *
+ * Description:   
+ *                
+ * Detail:        
+ *                
+ *  Change History
+ *  --------------
+ *
+ *  Who               Ver      Date          Description
+ *-----------------  ------   ------------  -------------------------------
+ * Abhishek Jois                01/01/2026
+*************************************************************************/
+DEFAULT FOR HWM_CTXARY_RECORD_POSITIONS is  EMPTY_TEXT_NUMBER 
+DEFAULT FOR HWM_CTXARY_HWM_MEASURE_DAY is  EMPTY_NUMBER_NUMBER 
+DEFAULT FOR measure is  EMPTY_NUMBER_NUMBER
+DEFAULT FOR SubresourceId is  EMPTY_NUMBER_NUMBER
+DEFAULT FOR PayrollTimeType is  EMPTY_TEXT_NUMBER
+DEFAULT FOR HWM_PER_ASG_NORMAL_HOURS is 0
+DEFAULT FOR HWM_PER_ASG_FREQUENCY_MEANING is 'ZZ'
+DEFAULT FOR HWM_PER_ASG_BARGAINING_UNIT_CODE is 'ZZ'
+DEFAULT FOR HWM_PER_ASG_GRADE_CODE is 'ZZ'
+DEFAULT FOR HWM_PER_ASG_JOB_CODE is 'ZZ'
+DEFAULT FOR Asg_ID is EMPTY_NUMBER_NUMBER
+DEFAULT FOR COMPENSATORYTIMEABSENCEPLAN  IS EMPTY_NUMBER_NUMBER
+DEFAULT FOR ENDDAYDURATION               IS EMPTY_NUMBER_NUMBER
+DEFAULT FOR STARTDAYDURATION             IS EMPTY_NUMBER_NUMBER
+DEFAULT FOR STARTTIME                    IS EMPTY_DATE_NUMBER
+DEFAULT FOR STOPTIME                     IS EMPTY_DATE_NUMBER
+DEFAULT_DATA_VALUE for HWM_DTL_SCHD_ALL_START_TIME is '4712/12/31' (date)
+DEFAULT_DATA_VALUE for HWM_DTL_SCHD_ALL_END_TIME is '4712/12/31' (date)
+DEFAULT_DATA_VALUE for HWM_DTL_SCHD_ALL_SCHEDULED_SHIFT_NAME is 'SCHNOSHIFT'
+DEFAULT_DATA_VALUE for HWM_DTL_SCHD_ALL_SCHEDULED_DURATION is 0
+
+
+INPUTS ARE 
+  HWM_CTXARY_RECORD_POSITIONS,
+  HWM_CTXARY_HWM_MEASURE_DAY,
+  measure,
+  SubresourceId,
+  PayrollTimeType,
+  ENDDAYDURATION,
+  STARTDAYDURATION,
+  STARTTIME,
+  STOPTIME
+
+/*  Following 2 lines are required right after inputs for all OTL and HWM formulas */
+ffs_id = GET_CONTEXT(HWM_FFS_ID, 0)
+rule_id = GET_CONTEXT(HWM_RULE_ID, 0)
+TC_End = GET_CONTEXT(HWM_CTX_PERIOD_END_DATE, TO_DATE('1951/01/01'))    
+ffName = 'MAX_MIN_VALIDATION'
+rLog  = add_rlog (ffs_id, rule_id, '>>> Enter - ' || ffName  ) 
+ 
+NullDate =  '01-JAN-1900'(DATE)  
+NullDateTime = '1900/01/01 00:00:00' (date)
+NullText = '**FF_NULL**'
+
+
+RecPositoinEoPeriod = 'END_PERIOD'
+RecPositoinEoDay = 'END_DAY'
+RecPositoinDetail = 'DETAIL'
+
+sumLvlTimeCard = 'TIMECARD'
+sumLvlDay = 'DAY'
+sumLvlDetail  = 'DETAIL'
+
+TimeRecordType_MEASURE = 'MEASURE'
+TimeRecordType_RANGE = 'RANGE'
+
+measure_period = GET_CONTEXT(HWM_MEASURE_PERIOD, 0)
+
+/*  Fixed Values from Rule header  */
+hSumLvl= Get_Hdr_Text(rule_id, 'RUN_SUMMATION_LEVEL', 'TIMECARD')
+hExecType  = Get_Hdr_Text(rule_id,'RULE_EXEC_TYPE', 'CREATE')
+
+hCreateYn  = 'N' 
+if (upper(hExecType) = 'CREATE'  ) then ( 
+  hCreateYn  = 'Y' 
+) 
+  
+ l_status = add_rlog (ffs_id , rule_id ,'Rule Header and Context:'  ||  
+					 ' , ffs_id ='  ||  TO_CHAR( ffs_id ) ||   
+					 ' , rule_id ='  ||  TO_CHAR( rule_id ) ||   
+					 ' , measure_period='  ||  TO_CHAR( measure_period ) ||   
+					 ' , hSumLvl='  ||   hSumLvl ||    
+					 ' , hExecType='  ||   hExecType ||      
+					 ' , hCreateYn='  ||   hCreateYn   )
+
+/* Fixed Values from Rule Input parameters */
+pCategoryId  = get_rvalue_number (rule_id ,'WORKED_TIME_CONDITION', 0) 
+pMsgCd ='REGULAR_OT_ERR'
+
+l_status = add_rlog (ffs_id , rule_id , 'Rule Parameters: '   ||
+			 ' , pCategoryId ='  ||  TO_CHAR( pCategoryId )  
+			 )
+    
+   
+wMaAry = HWM_CTXARY_RECORD_POSITIONS.count   
+rLog  = add_rlog (ffs_id, rule_id, 'Start bulk process - wMaAry=' || TO_CHAR( wMaAry )  )
+
+L_DATE = '2020/01/01 00:00:00' (DATE)
+
+L_HWM_CTX_SEARCH_START_DATE  = GET_CONTEXT(HWM_CTX_SEARCH_START_DATE,L_DATE)
+L_HWM_CTX_SEARCH_END_DATE  = GET_CONTEXT(HWM_CTX_SEARCH_END_DATE, L_DATE)
+L_HWM_SUBRESOURCE_ID  = GET_CONTEXT(HWM_SUBRESOURCE_ID, 0)
+L_HWM_RESOURCE_ID  = GET_CONTEXT(HWM_RESOURCE_ID, 0)
+
+rLog  = add_rlog (ffs_id, rule_id, ffName||' L_HWM_CTX_SEARCH_START_DATE => '|| TO_CHAR(L_HWM_CTX_SEARCH_START_DATE))
+rLog  = add_rlog (ffs_id, rule_id, ffName||' L_HWM_CTX_SEARCH_END_DATE => '|| TO_CHAR(L_HWM_CTX_SEARCH_END_DATE))
+rLog  = add_rlog (ffs_id, rule_id, ffName||' L_HWM_SUBRESOURCE_ID => '|| TO_CHAR(L_HWM_SUBRESOURCE_ID))
+rLog  = add_rlog (ffs_id, rule_id, ffName||' L_HWM_RESOURCE_ID => '|| TO_CHAR(L_HWM_RESOURCE_ID))
+
+
+max_ary = HWM_CTXARY_RECORD_POSITIONS.count  
+rLog  = add_rlog (ffs_id, rule_id, ffName||' HWM_CTXARY_RECORD_POSITIONS count=>' || TO_CHAR( max_ary )  )
+l_index = HWM_CTXARY_RECORD_POSITIONS.first(-1)
+
+WHILE (HWM_CTXARY_RECORD_POSITIONS.exists(l_index) ) LOOP
+    (
+    L_VALUE = HWM_CTXARY_RECORD_POSITIONS[l_index]
+    rLog = add_rlog (ffs_id, rule_id, ffName||' loop l_index => '|| TO_CHAR(l_index) ||' and value => '|| L_VALUE)
+    l_index = HWM_CTXARY_RECORD_POSITIONS.NEXT(l_index ,-1)
+    )
+
+
+max_ary = PayrollTimeType.count  
+rLog  = add_rlog (ffs_id, rule_id, ffName||' PayrollTimeType max_ary=' || TO_CHAR( max_ary )  )
+l_index = PayrollTimeType.first(-1)
+
+WHILE (PayrollTimeType.exists(l_index) ) LOOP
+    (
+    L_VALUE =  PayrollTimeType[l_index]
+    rLog = add_rlog (ffs_id, rule_id, ffName||' loop l_index => '|| TO_CHAR(l_index) ||' and value => '|| L_VALUE)
+    l_index  = PayrollTimeType.NEXT(l_index ,-1)
+    )
+
+max_ary = STARTTIME.count  
+rLog  = add_rlog (ffs_id, rule_id, ffName||' STARTTIME max_ary=' || TO_CHAR( max_ary )  )
+l_index = STARTTIME.first(-1)
+
+WHILE (STARTTIME.exists(l_index) ) LOOP
+    (
+    L_VALUE2       =  STARTTIME[l_index]
+    rLog  = add_rlog (ffs_id, rule_id, ffName||' loop l_index => '|| TO_CHAR(l_index) ||' and value => '|| to_char(L_VALUE2))
+    l_index  = STARTTIME.NEXT(l_index ,-1)
+    )
+
+max_ary = StopTime.count  
+rLog  = add_rlog (ffs_id, rule_id, ffName||' StopTime max_ary=' || TO_CHAR( max_ary )  )
+l_index = StopTime.first(-1)
+
+WHILE (StopTime.exists(l_index) ) LOOP
+    (
+    L_VALUE2       =  StopTime[l_index]
+    rLog  = add_rlog (ffs_id, rule_id, ffName||' loop l_index => '|| TO_CHAR(l_index) ||' and value => '|| to_char(L_VALUE2))
+    l_index  = StopTime.NEXT(l_index ,-1)
+    )
+
+max_ary = measure.count  
+rLog  = add_rlog (ffs_id, rule_id, ffName||' measure max_ary=' || TO_CHAR( max_ary )  )
+l_index = measure.first(-1)
+
+WHILE (measure.exists(l_index) ) LOOP
+    (
+    L_VALUE1 =  measure[l_index]
+    rLog  = add_rlog (ffs_id, rule_id, ffName||' loop l_index => '|| TO_CHAR(l_index) ||' and value => '|| to_char(L_VALUE1))
+    l_index  = measure.NEXT(l_index ,-1)
+    )
+	
+L_Measure = 0
+L_Absence_exist = 'N'
+L_P_Holiday_exist = 'N'
+L_Emp_TerminationDate  = '4712/12/31'
+TimeCardStartDate = '1951/01/01'
+max_ary = HWM_CTXARY_RECORD_POSITIONS.count  
+rLog  = add_rlog (ffs_id, rule_id, ffName||' HWM_CTXARY_RECORD_POSITIONS count=>' || TO_CHAR( max_ary )  )
+l_index = HWM_CTXARY_RECORD_POSITIONS.first(-1)
+out_msg_ary = EMPTY_TEXT_NUMBER
+
+WHILE (HWM_CTXARY_RECORD_POSITIONS.exists(l_index) ) LOOP
+(
+	rLog  = add_rlog (ffs_id, rule_id, ffName||' Inside first Loop l_index => '|| to_char(l_index))
+	L_VALUE = HWM_CTXARY_RECORD_POSITIONS[l_index]
+	rLog  = add_rlog (ffs_id, rule_id, ffName||' Inside Loop L_VALUE => '|| L_VALUE)
+	IF L_VALUE = RecPositoinDetail then 
+	(
+		if (MEASURE.exists(l_index)) then 
+		(
+			IF(PayrollTimeType.EXISTS(l_index) and (PayrollTimeType[l_index] = 'Regular Hours IN' or PayrollTimeType[l_index] = 'Regular Hours US' or PayrollTimeType[l_index] = 'Regular Hours AE' or PayrollTimeType[l_index] = 'Regular Hours CH' or PayrollTimeType[l_index] = 'Regular Hours PL' or PayrollTimeType[l_index] = 'Regular Hours UK' or PayrollTimeType[l_index] = 'Regular Hours CAN')) THEN
+			(
+
+				L_Measure = L_Measure + Measure[l_index]
+				L_DAY_START = STARTTIME[l_index]
+				L_DAY_END =   STOPTIME[l_index]
+				L_DAY_START_H = to_char(L_DAY_START,'YYYY-MM-DD')
+				
+				
+				/*RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' ENDDAYDURATION=> ' ||  to_char(ENDDAYDURATION[l_index] ))
+				RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' STARTDAYDURATION=> ' ||  to_char(STARTDAYDURATION[l_index] ))*/
+				
+				RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' L_DAY_START_H =>' || ( L_DAY_START_H)  )
+				RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' L_DAY_END =>' || TO_CHAR( L_DAY_END)  )
+			)
+		)
+	)
+	IF L_VALUE = RecPositoinEoDay then 
+	(
+	
+		L_DAY_START = STARTTIME[l_index]
+		L_DAY_DAY =  TO_CHAR( L_DAY_START,'DAY')
+		rLog  = add_rlog (ffs_id, rule_id, ffName||' L_DAY_START DAY=' || L_DAY_DAY )  
+		L_PERSON_ID = L_HWM_RESOURCE_ID
+		rLog  = add_rlog (ffs_id, rule_id, ffName||' L_PERSON_ID=' || TO_CHAR( L_PERSON_ID )  )
+		
+		
+		L_Assignment_id			= GET_CONTEXT(HWM_SUBRESOURCE_ID, 0)
+		L_PARAM1 				= '|=ASSIGNMENT_ID='''||to_char(L_Assignment_id)||''''
+		L_Emp_TerminationDate 	= GET_VALUE_SET('GET_EMP_TERMINATION_DATE',L_PARAM1)
+		RLOG 					= ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' Inside enday before first if L_Emp_TerminationDate =>' || (L_Emp_TerminationDate))
+		TimeCardStartDate 		=  TO_CHAR(STARTTIME[l_index], 'YYYY/MM/DD')
+		RLOG 					= ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' Inside enday before first TimeCardStartDate =>' || (TimeCardStartDate))
+		
+		PARAM='|=START_DATE='''||TO_CHAR(L_DAY_START,'YYYY-MM-DD')||''''||'|PERSON_ID='''||to_char(L_PERSON_ID)||''''
+		L_Absence=GET_VALUE_SET('ABSENCE_ENTRY',PARAM)
+		RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' L_Absence=> ' ||  L_Absence   )
+		RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' L_Absence_exist_before_if=> ' ||  L_Absence_exist   )
+		
+		If isnull(L_Absence) = 'Y' then
+		(
+			L_Absence_exist = 'Y'
+			RLOG  = ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' L_Absence_exist_after_IF=> ' ||  L_Absence_exist   )
+		)
+		
+		if ((PAYROLLTIMETYPE.exists(l_index) ) and  (PAYROLLTIMETYPE[l_index] ='Holiday US' or PAYROLLTIMETYPE[l_index] ='Holiday IN' or PAYROLLTIMETYPE[l_index] ='Holiday AE' or PAYROLLTIMETYPE[l_index] ='Holiday CH' or PAYROLLTIMETYPE[l_index] ='Holiday PL'  or  PAYROLLTIMETYPE[l_index] ='Holiday UK' or PAYROLLTIMETYPE[l_index] ='Holiday CAN'  ) ) then (
+		
+		L_P_Holiday_exist = 'Y'
+		)
+		
+		If (L_P_Holiday_exist = 'N' and L_Absence_exist = 'N'  and L_Measure < 8 and (TimeCardStartDate <= L_Emp_TerminationDate or ISNULL(L_Emp_TerminationDate)= 'N') and L_DAY_DAY<> 'SUNDAY' and L_DAY_DAY<> 'SATURDAY') then
+		(
+			RLOG 					= ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' Inside Enday error First if L_Emp_TerminationDate =>' || (L_Emp_TerminationDate))
+			RLOG 					= ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' Inside Enday error First if TimeCardStartDate =>' || (TimeCardStartDate))
+			L_ERROR1 = 'Regular hour should not be less than 8 hours, please correct'
+			L_Token1_name = 'ERROR1'
+			L_Token2_name = 'ERROR2'
+			L_Token1_value = L_ERROR1
+			L_Token2_value = ' '
+			
+			OUT_MSG = get_output_msg2( 'HWM', pMsgCd, L_Token1_name, L_Token1_value, L_Token2_name, L_Token2_value)
+			rLog  = add_rlog (ffs_id, rule_id, ffName||' OUT_MSG=' ||OUT_MSG)
+			out_msg_ary[l_index] = OUT_MSG
+		)
+		
+		
+		If (L_P_Holiday_exist = 'N' and L_Absence_exist = 'N' and L_Measure > 16 and (TimeCardStartDate <= L_Emp_TerminationDate or ISNULL(L_Emp_TerminationDate)= 'N'))THEN
+		(
+			RLOG 					= ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' Inside Enday error Second if L_Emp_TerminationDate =>' || (L_Emp_TerminationDate))
+			RLOG 					= ADD_RLOG (FFS_ID, RULE_ID, FFNAME||' Inside Enday error Second if TimeCardStartDate =>' || (TimeCardStartDate))
+			L_ERROR1 = 'Regular hour should not be more than 16 hours, please correct'
+			L_Token1_name = 'ERROR1'
+			L_Token2_name = 'ERROR2'
+			L_Token1_value = L_ERROR1
+			L_Token2_value = ' '
+			
+			OUT_MSG = get_output_msg2( 'HWM', pMsgCd, L_Token1_name, L_Token1_value, L_Token2_name, L_Token2_value)
+			rLog  = add_rlog (ffs_id, rule_id, ffName||' OUT_MSG=' ||OUT_MSG)
+			out_msg_ary[l_index] = OUT_MSG
+		)
+		
+		L_Measure = 0
+		L_Absence_exist = 'N'
+		L_P_Holiday_exist = 'N'
+		IS_SCHD_DAY = 'Y'
+	)
+l_index  = HWM_CTXARY_RECORD_POSITIONS.NEXT(l_index ,-1)
+)
+rLog  = add_rlog (ffs_id, rule_id, '<< Exit - ' || ffName   )
+
+RETURN out_msg_ary
+
+
+
+
