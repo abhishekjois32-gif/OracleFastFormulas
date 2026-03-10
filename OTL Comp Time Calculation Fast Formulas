@@ -1,0 +1,272 @@
+/******************************************************************************
+-------------------------------------------------------------------------------
+FORMULA NAME: OTL_COMPTIME_FF
+FORMULA TYPE: Time Calculation Rules
+DESCRIPTION:
+===============================================================================
+Change History:
+Name			Date			Version		Comments
+Abhishek			2025-04-16		1.0		Created Initial version
+-------------------------------------------------------------------------------
+*******************************************************************************/
+
+DEFAULT FOR HWM_CTXARY_RECORD_POSITIONS     is  EMPTY_TEXT_NUMBER  
+DEFAULT FOR HWM_CTXARY_HWM_MEASURE_DAY      is  EMPTY_NUMBER_NUMBER 
+DEFAULT FOR measure           is  EMPTY_NUMBER_NUMBER
+DEFAULT FOR StartTime         is  EMPTY_DATE_NUMBER
+DEFAULT FOR StopTime         is  EMPTY_DATE_NUMBER
+DEFAULT FOR PayrollTimeType   is  EMPTY_TEXT_NUMBER 
+DEFAULT FOR AbsenceType       is  EMPTY_NUMBER_NUMBER 
+
+DEFAULT FOR PER_ASG_FTE_VALUE IS 1
+DEFAULT for PER_ASG_EMPLOYMENT_CATEGORY				is 'XX'
+DEFAULT for PER_ASG_POSITION_NAME is 'XX'
+DEFAULT for PER_ASG_JOB_NAME is 'XX'
+DEFAULT for PER_ASG_FREQUENCY is 'XX'
+DEFAULT FOR PER_ASG_NORMAL_HOURS is 0
+DEFAULT FOR PER_ASG_STATUS_USER_STATUS is 'Active - Payroll Eligible'
+DEFAULT FOR PER_ASG_REL_ACTUAL_TERMINATION_DATE IS '4751/12/31 00:00:00' (DATE)
+ 
+INPUTS ARE
+  HWM_CTXARY_RECORD_POSITIONS,
+  HWM_CTXARY_HWM_MEASURE_DAY,
+  measure, 
+  StartTime,
+  StopTime,
+  PayrollTimeType ,
+  AbsenceType 
+
+ffName = 'OTL_COMPTIME_FF'
+ffs_id = GET_CONTEXT(HWM_FFS_ID, 0) 
+rule_id = GET_CONTEXT(HWM_RULE_ID, 0) 
+rLog  = add_rlog (ffs_id, rule_id, ffName)
+   
+   
+/* Fixed Values from Rule header  */
+ hSumLvl= Get_Hdr_Text(rule_id, 'RUN_SUMMATION_LEVEL', 'TIMECARD') 
+ hExecType  = Get_Hdr_Text(rule_id,'RULE_EXEC_TYPE', 'CREATE')  
+ 
+ hCreateYn  = 'N' 
+ if (upper(hExecType) = 'CREATE'  ) then ( 
+   hCreateYn  = 'Y' 
+ ) 
+   
+ rLog = add_rlog (ffs_id , rule_id ,'Rule Header:'  ||  
+ ' , ffs_id ='  ||  TO_CHAR( ffs_id ) ||   
+ ' , rule_id ='  ||  TO_CHAR( rule_id ) ||   
+ ' , hSumLvl='  ||   hSumLvl ||    
+ ' , hExecType='  ||   hExecType ||      
+ ' , hCreateYn='  ||   hCreateYn   )
+ 
+NullDate =  '01-JAN-1900'(DATE)
+NullText =  '**FF_NULL**'
+ 
+sumLvlTimeCard = 'TIMECARD'
+sumLvlDay = 'DAY'
+sumLvlDetail  = 'DETAIL'
+
+RecPositoinEoPeriod = 'END_PERIOD' 
+RecPositoinEoDay = 'END_DAY' 
+RecPositoinDetail = 'DETAIL'  
+
+/* Fixed Values from Rule header  */
+hSumLvl= Get_Hdr_Text(rule_id, 'RUN_SUMMATION_LEVEL', 'TIMECARD') 
+exec_type  = Get_Hdr_Text(rule_id,'RULE_EXEC_TYPE', 'CREATE') 
+    
+/* Fixed Values from Rule Input parameters */
+pCategoryId  = get_rvalue_number (rule_id ,'WORKED_TIME_CONDITION', 0) 
+pMaxHrs  = get_rvalue_number (rule_id ,'DEFINED_LIMIT', 0) 
+   
+l_status = add_rlog (ffs_id , rule_id , 'Rule Parameters: '   ||
+			 ' , pMaxHrs='  ||  TO_CHAR( pMaxHrs ) || 
+			 ' , pCategoryId ='  ||  TO_CHAR( pCategoryId )  ) 
+ 
+ max_loop = 500
+ max_ary = HWM_CTXARY_RECORD_POSITIONS.count  
+ rLog  = add_rlog (ffs_id, rule_id, ' >>> Start bulk process - max_ary=' || TO_CHAR( max_ary )  )
+ 
+
+
+ctx_end_date = GET_CONTEXT(HWM_CTX_SEARCH_END_DATE, NullDate) 
+lPrimaryAsgPersonId = GET_CONTEXT(HWM_SUBRESOURCE_ID,0)
+
+CHANGE_CONTEXTS (HR_ASSIGNMENT_ID = lPrimaryAsgPersonId,EFFECTIVE_DATE = ctx_end_date)
+(
+l_asg_cat_code						=	PER_ASG_EMPLOYMENT_CATEGORY
+lNormalWorkingHours = PER_ASG_NORMAL_HOURS
+lPos_name = PER_ASG_POSITION_NAME
+lJob_name = PER_ASG_JOB_NAME
+l_frequency = PER_ASG_FREQUENCY
+fte = PER_ASG_FTE_VALUE
+lTerminationDate_1 = PER_ASG_REL_ACTUAL_TERMINATION_DATE
+
+rLog = add_rlog (ffs_id , rule_id ,  'lPos_name  =' || (lPos_name) || ' ,fte - ' || TO_CHAR( fte ) || ' ,lNormalWorkingHours - ' || TO_CHAR(lNormalWorkingHours) || ' ,lTerminationDate_1 -'|| TO_CHAR(lTerminationDate_1) )
+
+)
+
+
+ /* if (hCreateYn  = 'N' ) then
+ (
+	rLog  = add_rlog (ffs_id, rule_id, ' >>> Check payrolltimetype- max_ary=' || TO_CHAR( max_ary )  )
+	 
+	rLog  = add_rlog (ffs_id, rule_id, '-- end  Check payrolltimetype loop <<<<' ) 
+	 
+) */
+
+
+out_measure_ary_under 	=	EMPTY_NUMBER_NUMBER
+out_measure_ary_over 	=	EMPTY_NUMBER_NUMBER
+out_measure_premium     =  EMPTY_NUMBER_NUMBER
+wkTotalHrsDay = 0
+wkTotalHrsTc  = 0
+
+cntr = 0
+nidx = 0
+nxtRec = 1
+DayCounter = 0
+
+WHILE (nidx < max_ary) LOOP
+(
+    /* cntr = cntr + 1
+    nidx = nidx + nxtRec */
+    nidx = nidx + 1	 
+	tcRecPos = NullText
+	tcMeasure = 0
+	tcMeasureDay = 0
+	tcStartTime = nullDate
+	tcStopTime = nullDate
+	l_abs_type = nullText
+	tcPayrolltimetype = NullText
+	tcAbsenceType = -1
+	
+	tcRecPos   = HWM_CTXARY_RECORD_POSITIONS[nidx]
+	
+	/* if (l_asg_cat_code = 'TTU_CLER_FT_PERM' or l_asg_cat_code ='TTU_CLER_PT_PERM')
+		 then ( */
+	rLog  = add_rlog (ffs_id, rule_id, ' >>> Check payrolltimetype- max_ary333='  )
+	if (tcRecPos = 'END_DAY') then (
+        DayCounter = DayCounter + 1
+        if (DayCounter = 7 ) then (
+        DayCounter = 0
+        wkTotalHrsTc = 0 
+        wkTotalHrsDay = 0
+		
+      )
+   )
+rLog  = add_rlog (ffs_id, rule_id, ' >>> Check payrolltimetype- max_ary44='  )
+
+	if (MEASURE.exists(nidx) ) then 
+	( 
+	tcMeasure  = MEASURE[nidx]
+	)
+	
+	if (StartTime.exists(nidx) ) then ( tcStartTime  = StartTime[nidx]   )
+	if (StopTime.exists(nidx) ) then ( tcStopTime  = StopTime[nidx]   )
+	if (HWM_CTXARY_HWM_MEASURE_DAY.exists(nidx) ) then ( tcMeasureDay  = HWM_CTXARY_HWM_MEASURE_DAY[nidx]  )
+	
+	if (PAYROLLTIMETYPE.exists(nidx) ) then ( tcPayrolltimetype  = PAYROLLTIMETYPE[nidx]   )
+	if (ABSENCETYPE.exists(nidx) ) then ( tcAbsenceType  = ABSENCETYPE[nidx]) 
+		 
+		
+		
+			   
+	rLog = add_rlog (ffs_id, rule_id, 'loop1 - ck AbsenceType Index: '  ||    TO_CHAR( nidx )  || 
+					 ' , payrolltimetype='  || tcPayrolltimetype || 
+					  '; l_abs_type='  ||  l_abs_type   ||
+					   '; nidx='  || to_char( nidx)   ||
+					   '; tcMeasureDay='  || to_char( tcMeasureDay)   ||
+					  ' , AbsenceType='  || to_char( tcAbsenceType )  )
+
+
+	
+
+ocMeasure_under  = -9999
+ocMeasure_over   = -9999
+
+	if (tcMeasure > 0) then
+	(
+		wkTotalHrsTc = tcMeasure + wkTotalHrsTc
+		wkTotalHrsDay = tcMeasure + wkTotalHrsDay
+		rLog = add_rlog (ffs_id, rule_id, 'loop1 - ck time: '  ||    TO_CHAR( wkTotalHrsTc )  || 
+					   '; tcMeasureDay='  || to_char(tcMeasureDay)   ||
+					  ' , AbsenceType='  || to_char(wkTotalHrsDay)  )
+					  
+		if (1=1)  then
+		(
+			ocMeasure_under = tcMeasure
+			ocMeasure_over = -9999
+
+			if (wkTotalHrsTc > pMaxHrs) then
+			(
+				if ((wkTotalHrsTc - tcMeasure) < pMaxHrs) then
+				(
+					ocMeasure_under = pMaxHrs - (wkTotalHrsTc - tcMeasure)
+					ocMeasure_over = tcMeasure - ocMeasure_under
+					rLog = add_rlog (ffs_id, rule_id, 'loop1 - ck time: '  ||    TO_CHAR( pMaxHrs ) )
+				)
+				else
+				(
+					ocMeasure_under = -9999
+					ocMeasure_over = tcMeasure
+				)
+			)
+			else
+			(
+				ocMeasure_under = ocMeasure_under
+				ocMeasure_over = ocMeasure_over
+			)
+		)
+			rLog = add_rlog (ffs_id, rule_id,'nidx: '  ||
+							' , nidx ='  ||  to_char(nidx))
+			rLog = add_rlog (ffs_id, rule_id,'ocMeasure_under: '  ||
+						  ' , ocMeasure_under[nidx]='  ||  to_char(ocMeasure_under))
+			rLog = add_rlog (ffs_id, rule_id,'ocMeasure_over: '  ||
+						  ' , ocMeasure_over[nidx]='  ||  to_char(ocMeasure_over))
+	)
+
+	if (tcRecPos = RecPositoinEoDay) then
+	(
+		wkTotalHrsDay    = 0
+	)  ELSE
+	IF (tcRecPos = RecPositoinEoPeriod) then
+	(
+		wkTotalHrsDay    = 0
+		wkTotalHrsTc = 0
+	)
+	
+	if (ocMeasure_under <>  -9999 ) Then (
+		out_measure_ary_under[nidx]   = ocMeasure_under
+	)	
+
+     if (ocMeasure_over <>  -9999 ) Then (
+     if (wkTotalHrsTc > 40) then (
+	 if (wkTotalHrsTc - wkTotalHrsDay ) >= 40 then (
+	 out_measure_ary_over[nidx] = 0 
+	 out_measure_premium[nidx]  = ocMeasure_over * 1.5
+	 )
+	 else  if (wkTotalHrsTc - wkTotalHrsDay ) >= 37.5
+	 then (
+	 out_measure_ary_over[nidx] = 40 - (wkTotalHrsTc - wkTotalHrsDay ) 
+  out_measure_premium[nidx]    = (wkTotalHrsTc - 40) * 1.5 
+	 )
+	else (
+		out_measure_ary_over[nidx]   = 2.5 
+		out_measure_premium[nidx]  = (wkTotalHrsTc - 40) * 1.5
+		)
+)
+ else (out_measure_ary_over[nidx]   = ocMeasure_over * 1 
+ )
+
+)
+
+	 
+	
+
+	if (nidx >  1000 ) Then (
+		/* endless loop?  Stop process if more than max_loop records found */
+		ex = raise_error (ffs_id, rule_id, 'Formula ' || ffName || ' terminated due to possible end-less loop.' )
+	) 
+)
+	rLog  = add_rlog (ffs_id, rule_id, '-- end bulk process <<<<' )
+
+RETURN  out_measure_ary_under, out_measure_ary_over, out_measure_premium
